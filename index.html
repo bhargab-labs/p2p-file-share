@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShareSync - P2P File Transfer</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+
+        .mode-selector {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            color: white;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .mode-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .mode-btn.active {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .pin-display {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+        }
+
+        .pin-code {
+            font-size: 3em;
+            font-weight: 700;
+            color: white;
+            letter-spacing: 0.3em;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            margin-bottom: 10px;
+        }
+
+        .pin-label {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.1em;
+        }
+
+        .pin-input {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .pin-digit {
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1.8em;
+            font-weight: 600;
+            text-align: center;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .pin-digit:focus {
+            border-color: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+        }
+
+        .file-drop {
+            border: 3px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            padding: 40px 20px;
+            margin: 20px 0;
+            background: rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-drop:hover, .file-drop.dragover {
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.02);
+        }
+
+        .file-drop-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        .file-drop-text {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .file-drop-subtext {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9em;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 15px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+            min-width: 150px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(238, 90, 82, 0.4);
+        }
+
+        .btn:disabled {
+            background: rgba(255, 255, 255, 0.2);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .progress-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .progress-bar {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            height: 100%;
+            width: 0%;
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+
+        .status {
+            color: rgba(255, 255, 255, 0.8);
+            margin: 10px 0;
+            font-weight: 500;
+        }
+
+        .file-info {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            text-align: left;
+        }
+
+        .file-name {
+            color: white;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .file-size {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9em;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .error {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid rgba(255, 107, 107, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            color: #ffcccb;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            color: #c8e6c9;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📱 ShareSync</div>
+        <div class="subtitle">Lightning-fast peer-to-peer file sharing</div>
+
+        <div class="mode-selector">
+            <button class="mode-btn active" id="sendBtn">Send File</button>
+            <button class="mode-btn" id="receiveBtn">Receive File</button>
+        </div>
+
+        <!-- Send File Section -->
+        <div class="section active" id="sendSection">
+            <div class="file-drop" id="fileDropZone">
+                <div class="file-drop-icon">📎</div>
+                <div class="file-drop-text">Drop your file here or click to browse</div>
+                <div class="file-drop-subtext">Any file type • Up to 1GB</div>
+            </div>
+            <input type="file" id="fileInput" style="display: none;">
+            
+            <div id="fileSelected" class="hidden">
+                <div class="file-info">
+                    <div class="file-name" id="fileName"></div>
+                    <div class="file-size" id="fileSize"></div>
+                </div>
+                <button class="btn" id="generatePin">Generate PIN & Wait</button>
+            </div>
+
+            <div id="waitingForReceiver" class="hidden">
+                <div class="pin-display">
+                    <div class="pin-code" id="generatedPin"></div>
+                    <div class="pin-label">Share this PIN with receiver</div>
+                </div>
+                <div class="status">Waiting for receiver to connect...</div>
+            </div>
+        </div>
+
+        <!-- Receive File Section -->
+        <div class="section" id="receiveSection">
+            <div class="pin-label" style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.8);">
+                Enter the 6-digit PIN
+            </div>
+            <div class="pin-input">
+                <input type="text" class="pin-digit" maxlength="1" id="pin1">
+                <input type="text" class="pin-digit" maxlength="1" id="pin2">
+                <input type="text" class="pin-digit" maxlength="1" id="pin3">
+                <input type="text" class="pin-digit" maxlength="1" id="pin4">
+                <input type="text" class="pin-digit" maxlength="1" id="pin5">
+                <input type="text" class="pin-digit" maxlength="1" id="pin6">
+            </div>
+            <button class="btn" id="connectBtn" disabled>Connect & Receive</button>
+        </div>
+
+        <!-- Transfer Progress -->
+        <div id="transferSection" class="hidden">
+            <div class="progress-container">
+                <div class="status" id="transferStatus">Preparing transfer...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="status" id="transferSpeed"></div>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="messageArea"></div>
+    </div>
+
+    <script>
+        // WebSocket Signaling Server Configuration
+        const SIGNALING_SERVER = window.location.protocol === 'https:' 
+            ? 'wss://' + window.location.host 
+            : 'ws://' + window.location.host;
+        let signalingSocket = null;
+
+        // Application State
+        let currentMode = 'send';
+        let selectedFile = null;
+        let currentPin = null;
+        let peerConnection = null;
+        let dataChannel = null;
+        let isConnected = false;
+
+        // WebRTC Configuration
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        // DOM Elements
+        const sendBtn = document.getElementById('sendBtn');
+        const receiveBtn = document.getElementById('receiveBtn');
+        const sendSection = document.getElementById('sendSection');
+        const receiveSection = document.getElementById('receiveSection');
+        const fileDropZone = document.getElementById('fileDropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileSelected = document.getElementById('fileSelected');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const generatePin = document.getElementById('generatePin');
+        const waitingForReceiver = document.getElementById('waitingForReceiver');
+        const generatedPin = document.getElementById('generatedPin');
+        const pinInputs = document.querySelectorAll('.pin-digit');
+        const connectBtn = document.getElementById('connectBtn');
+        const transferSection = document.getElementById('transferSection');
+        const transferStatus = document.getElementById('transferStatus');
+        const progressFill = document.getElementById('progressFill');
+        const transferSpeed = document.getElementById('transferSpeed');
+        const messageArea = document.getElementById('messageArea');
+
+        // Utility Functions
+        function generateRandomPin() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
+
+        function formatFileSize(bytes) {
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            if (bytes === 0) return '0 Bytes';
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function showMessage(message, type = 'info') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            messageArea.appendChild(messageDiv);
+            setTimeout(() => messageDiv.remove(), 5000);
+        }
+
+        // Mode Switching
+        sendBtn.addEventListener('click', () => switchMode('send'));
+        receiveBtn.addEventListener('click', () => switchMode('receive'));
+
+        function switchMode(mode) {
+            currentMode = mode;
+            
+            // Update buttons
+            sendBtn.classList.toggle('active', mode === 'send');
+            receiveBtn.classList.toggle('active', mode === 'receive');
+            
+            // Update sections
+            sendSection.classList.toggle('active', mode === 'send');
+            receiveSection.classList.toggle('active', mode === 'receive');
+            
+            // Reset state
+            resetApp();
+        }
+
+        // Initialize WebSocket connection
+        function initializeSignaling() {
+            return new Promise((resolve, reject) => {
+                signalingSocket = new WebSocket(SIGNALING_SERVER);
+                
+                signalingSocket.onopen = () => {
+                    console.log('Connected to signaling server');
+                    resolve();
+                };
+                
+                signalingSocket.onerror = (error) => {
+                    console.error('Signaling server error:', error);
+                    showMessage('Failed to connect to signaling server', 'error');
+                    reject(error);
+                };
+                
+                signalingSocket.onmessage = handleSignalingMessage;
+            });
+        }
+
+        function handleSignalingMessage(event) {
+            const message = JSON.parse(event.data);
+            
+            switch (message.type) {
+                case 'pin-taken':
+                    showMessage('PIN already in use, try another', 'error');
+                    generatePin.disabled = false;
+                    break;
+                    
+                case 'receiver-joined':
+                    showMessage('Receiver connected! Starting transfer...', 'success');
+                    break;
+                    
+                case 'offer':
+                    handleOffer(message.offer);
+                    break;
+                    
+                case 'answer':
+                    handleAnswer(message.answer);
+                    break;
+                    
+                case 'ice-candidate':
+                    handleIceCandidate(message.candidate);
+                    break;
+                    
+                case 'session-not-found':
+                    showMessage('Invalid PIN or session expired', 'error');
+                    break;
+            }
+        }
+
+        function sendSignalingMessage(message) {
+            if (signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
+                signalingSocket.send(JSON.stringify(message));
+            }
+        }
+
+        function resetApp() {
+            selectedFile = null;
+            currentPin = null;
+            isConnected = false;
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            // Hide all conditional sections
+            fileSelected.classList.add('hidden');
+            waitingForReceiver.classList.add('hidden');
+            transferSection.classList.add('hidden');
+            
+            // Reset form elements
+            fileInput.value = '';
+            pinInputs.forEach(input => input.value = '');
+            connectBtn.disabled = true;
+            
+            // Clear messages
+            messageArea.innerHTML = '';
+        }
+        fileDropZone.addEventListener('click', () => fileInput.click());
+        fileDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileDropZone.classList.add('dragover');
+        });
+        fileDropZone.addEventListener('dragleave', () => {
+            fileDropZone.classList.remove('dragover');
+        });
+        fileDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileDropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            fileSelected.classList.remove('hidden');
+        }
+
+        // PIN Generation and Connection
+        generatePin.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            
+            try {
+                await initializeSignaling();
+                
+                currentPin = generateRandomPin();
+                generatedPin.textContent = currentPin;
+                waitingForReceiver.classList.remove('hidden');
+                generatePin.disabled = true;
+                
+                await initializeWebRTC('sender');
+                
+                // Register as sender with PIN
+                sendSignalingMessage({
+                    type: 'create-session',
+                    pin: currentPin,
+                    fileName: selectedFile.name,
+                    fileSize: selectedFile.size
+                });
+                
+            } catch (error) {
+                showMessage('Failed to initialize connection', 'error');
+                generatePin.disabled = false;
+            }
+        });
+
+        // PIN Input Handling
+        pinInputs.forEach((input, index) => {
+            input.addEventListener('input', (e) => {
+                if (e.target.value.length === 1 && index < pinInputs.length - 1) {
+                    pinInputs[index + 1].focus();
+                }
+                updateConnectButton();
+            });
+            
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
+                    pinInputs[index - 1].focus();
+                }
+            });
+        });
+
+        function updateConnectButton() {
+            const pin = Array.from(pinInputs).map(input => input.value).join('');
+            connectBtn.disabled = pin.length !== 6;
+        }
+
+        connectBtn.addEventListener('click', async () => {
+            const pin = Array.from(pinInputs).map(input => input.value).join('');
+            if (pin.length === 6) {
+                try {
+                    await initializeSignaling();
+                    
+                    currentPin = pin;
+                    transferSection.classList.remove('hidden');
+                    transferStatus.textContent = 'Connecting...';
+                    
+                    await initializeWebRTC('receiver');
+                    
+                    // Join session with PIN
+                    sendSignalingMessage({
+                        type: 'join-session',
+                        pin: currentPin
+                    });
+                    
+                } catch (error) {
+                    showMessage('Failed to connect', 'error');
+                }
+            }
+        });
+
+        // WebRTC Implementation
+        async function initializeWebRTC(role) {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    sendSignalingMessage({
+                        type: 'ice-candidate',
+                        pin: currentPin,
+                        candidate: event.candidate.toJSON()
+                    });
+                }
+            };
+
+            if (role === 'sender') {
+                // Create data channel for file transfer
+                dataChannel = peerConnection.createDataChannel('fileTransfer', {
+                    ordered: true
+                });
+                setupDataChannel();
+                
+                // Create and send offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                sendSignalingMessage({
+                    type: 'offer',
+                    pin: currentPin,
+                    offer: offer.toJSON()
+                });
+                
+            } else {
+                // Handle incoming data channel
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
+                };
+            }
+
+            peerConnection.onconnectionstatechange = () => {
+                console.log('Connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'connected') {
+                    isConnected = true;
+                    showMessage('Connected successfully!', 'success');
+                }
+            };
+        }
+
+        async function handleOffer(offer) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            sendSignalingMessage({
+                type: 'answer',
+                pin: currentPin,
+                answer: answer.toJSON()
+            });
+        }
+
+        async function handleAnswer(answer) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+
+        async function handleIceCandidate(candidate) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                console.log('Data channel opened');
+                if (currentMode === 'send' && selectedFile) {
+                    startFileTransfer();
+                }
+            };
+
+            dataChannel.onmessage = (event) => {
+                handleIncomingData(event.data);
+            };
+
+            dataChannel.onerror = (error) => {
+                console.error('Data channel error:', error);
+                showMessage('Transfer error occurred', 'error');
+            };
+        }
+
+        // Initialize
+        showMessage('Ready to share files!', 'success');
+    </script>
+</body>
+</html>
