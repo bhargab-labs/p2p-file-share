@@ -423,17 +423,26 @@
         // Initialize WebSocket connection
         function initializeSignaling() {
             return new Promise((resolve, reject) => {
+                console.log('🔌 Connecting to signaling server:', SIGNALING_SERVER);
                 signalingSocket = new WebSocket(SIGNALING_SERVER);
                 
                 signalingSocket.onopen = () => {
-                    console.log('Connected to signaling server');
+                    console.log('✅ Connected to signaling server');
+                    showMessage('Connected to server', 'success');
                     resolve();
                 };
                 
                 signalingSocket.onerror = (error) => {
-                    console.error('Signaling server error:', error);
+                    console.error('❌ Signaling server error:', error);
                     showMessage('Failed to connect to signaling server', 'error');
                     reject(error);
+                };
+                
+                signalingSocket.onclose = (event) => {
+                    console.log('🔌 Signaling connection closed:', event.code, event.reason);
+                    if (event.code !== 1000) {
+                        showMessage('Connection to server lost', 'error');
+                    }
                 };
                 
                 signalingSocket.onmessage = handleSignalingMessage;
@@ -442,6 +451,7 @@
 
         function handleSignalingMessage(event) {
             const message = JSON.parse(event.data);
+            console.log('📥 Received signaling message:', message.type); // Debug log
             
             switch (message.type) {
                 case 'pin-taken':
@@ -453,27 +463,45 @@
                     showMessage('Receiver connected! Starting transfer...', 'success');
                     break;
                     
+                case 'session-joined':
+                    showMessage('Connected to sender! Waiting for file...', 'success');
+                    transferStatus.textContent = `Ready to receive: ${message.fileName}`;
+                    break;
+                    
                 case 'offer':
+                    console.log('📤 Handling offer');
                     handleOffer(message.offer);
                     break;
                     
                 case 'answer':
+                    console.log('📤 Handling answer');
                     handleAnswer(message.answer);
                     break;
                     
                 case 'ice-candidate':
+                    console.log('📤 Handling ICE candidate');
                     handleIceCandidate(message.candidate);
                     break;
                     
                 case 'session-not-found':
                     showMessage('Invalid PIN or session expired', 'error');
+                    transferSection.classList.add('hidden');
+                    break;
+                    
+                case 'session-full':
+                    showMessage('Session is full, try again later', 'error');
+                    transferSection.classList.add('hidden');
                     break;
             }
         }
 
         function sendSignalingMessage(message) {
             if (signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
+                console.log('📤 Sending signaling message:', message.type);
                 signalingSocket.send(JSON.stringify(message));
+            } else {
+                console.error('❌ Cannot send message - WebSocket not ready');
+                showMessage('Connection lost, please refresh and try again', 'error');
             }
         }
 
@@ -652,23 +680,44 @@
         }
 
         async function handleOffer(offer) {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            
-            sendSignalingMessage({
-                type: 'answer',
-                pin: currentPin,
-                answer: answer.toJSON()
-            });
+            try {
+                console.log('🤝 Setting remote description (offer)');
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                
+                console.log('🤝 Creating answer');
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                console.log('📤 Sending answer');
+                sendSignalingMessage({
+                    type: 'answer',
+                    pin: currentPin,
+                    answer: answer.toJSON()
+                });
+            } catch (error) {
+                console.error('❌ Error handling offer:', error);
+                showMessage('Failed to handle connection offer', 'error');
+            }
         }
 
         async function handleAnswer(answer) {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            try {
+                console.log('🤝 Setting remote description (answer)');
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            } catch (error) {
+                console.error('❌ Error handling answer:', error);
+                showMessage('Failed to handle connection answer', 'error');
+            }
         }
 
         async function handleIceCandidate(candidate) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            try {
+                console.log('🧊 Adding ICE candidate');
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                console.error('❌ Error adding ICE candidate:', error);
+                // Don't show error to user for ICE candidates as some failures are normal
+            }
         }
 
         function setupDataChannel() {
@@ -689,8 +738,100 @@
             };
         }
 
-        // Initialize
-        showMessage('Ready to share files!', 'success');
+        // File Transfer Logic
+        let receivedChunks = [];
+        let receivedSize = 0;
+        let totalSize = 0;
+        let startTime = 0;
+
+        function startFileTransfer() {
+            if (!selectedFile || !dataChannel || dataChannel.readyState !== 'open') return;
+
+            transferSection.classList.remove('hidden');
+            transferStatus.textContent = `Sending: ${selectedFile.name}`;
+            
+            const chunkSize = 64 * 1024; // 64KB chunks
+            let offset = 0;
+            startTime = Date.now();
+
+            // Send file metadata first
+            dataChannel.send(JSON.stringify({
+                type: 'metadata',
+                name: selectedFile.name,
+                size: selectedFile.size,
+                type: selectedFile.type
+            }));
+
+            function sendNextChunk() {
+                if (offset >= selectedFile.size) {
+                    dataChannel.send(JSON.stringify({ type: 'end' }));
+                    showMessage('File sent successfully!', 'success');
+                    return;
+                }
+
+                const chunk = selectedFile.slice(offset, offset + chunkSize);
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    dataChannel.send(e.target.result);
+                    offset += chunkSize;
+                    
+                    const progress = (offset / selectedFile.size) * 100;
+                    progressFill.style.width = `${Math.min(progress, 100)}%`;
+                    
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const speed = (offset / elapsed) / (1024 * 1024); // MB/s
+                    transferSpeed.textContent = `${speed.toFixed(2)} MB/s`;
+                    
+                    // Continue sending
+                    setTimeout(sendNextChunk, 10);
+                };
+                
+                reader.readAsArrayBuffer(chunk);
+            }
+
+            sendNextChunk();
+        }
+
+        function handleIncomingData(data) {
+            if (typeof data === 'string') {
+                try {
+                    const message = JSON.parse(data);
+                    if (message.type === 'metadata') {
+                        totalSize = message.size;
+                        receivedSize = 0;
+                        receivedChunks = [];
+                        startTime = Date.now();
+                        transferStatus.textContent = `Receiving: ${message.name}`;
+                        return;
+                    } else if (message.type === 'end') {
+                        // File transfer complete
+                        const blob = new Blob(receivedChunks);
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = transferStatus.textContent.replace('Receiving: ', '');
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        showMessage('File received successfully!', 'success');
+                        return;
+                    }
+                } catch (e) {
+                    // Not a JSON message, treat as file chunk
+                }
+            }
+
+            // Handle file chunk
+            receivedChunks.push(data);
+            receivedSize += data.byteLength;
+            
+            const progress = (receivedSize / totalSize) * 100;
+            progressFill.style.width = `${Math.min(progress, 100)}%`;
+            
+            const elapsed = (Date.now() - startTime) / 1000;
+            const speed = (receivedSize / elapsed) / (1024 * 1024); // MB/s
+            transferSpeed.textContent = `${speed.toFixed(2)} MB/s`;
+        }
     </script>
 </body>
 </html>
